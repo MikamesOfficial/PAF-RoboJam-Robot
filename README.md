@@ -1,6 +1,9 @@
 ![MKR__1](https://github.com/user-attachments/assets/9bddcdb0-9e25-41be-b641-f6b65f6a70a8)
 
+
 # PAF-RoboJam-Robot
+![YouTube Channel Subscribers](https://img.shields.io/youtube/channel/subscribers/UC9uMWFxLrUr0rWLnHrSuSsw)
+
 Documento completo de robot diseñado por alumnos de la Preparatoria Alfa Fundación
 
 ## Uso
