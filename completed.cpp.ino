@@ -1,181 +1,302 @@
 #include <Servo.h>
 
-// Objetos Servo para cada mecanismo
-Servo wheelFL;    // Rueda frontal izquierda
-Servo wheelFR;    // Rueda frontal derecha
-Servo wheelBL;    // Rueda trasera izquierda
-Servo wheelBR;    // Rueda trasera derecha
-Servo elevator;   // Sistema de polea para el elevador
-Servo clawAngle;  // Servo para la orientación de la garra (-90 a +90, remapeado a 0-180)
-Servo clawGrip;   // Servo para el agarre
+//==================================
+// Definición de pines
+//==================================
 
-// Pines de conexión (valores de prueba)
-const int pinWheelFL = 8;
-const int pinWheelFR = 9;
-const int pinWheelBL = 10;
-const int pinWheelBR = 11;
-const int pinElevator = 12;
-const int pinClawAngle = 7;  //4 tierra, 6 positivo, 7 señal
-const int pinClawGrip = 13;  // Conexión: señal (positivo a 5V)
+// Puente H Izquierdo (para ruedas del lado izquierdo)
+// Rueda izquierda trasera:
+const bool DEBUG = true;
 
-// Intervalo de actualización en milisegundos (10 ms)
-const unsigned long updateInterval = 10;
-unsigned long previousMillis = 0;
+const int LEFT_REAR_IN1 = 2;
+const int LEFT_REAR_IN2 = 3;
+// Rueda izquierda frontal:
+const int LEFT_FRONT_IN3 = 11;
+const int LEFT_FRONT_IN4 = 12;
 
-//---------------------------------
-// Funciones de control de movimientos
-//---------------------------------
+// Puente H del Medio (para sistema de polea/elevador)
+const int PULLEY_IN1 = 4;
+const int PULLEY_IN2 = 5;
 
-// Función para detener el movimiento (estado neutro en las ruedas)
-void stopMovement() {
-  wheelFL.write(90);
-  wheelFR.write(90);
-  wheelBL.write(90);
-  wheelBR.write(90);
-}
+// Puente H Derecho (para ruedas del lado derecho)
+// Rueda derecha frontal:
+const int RIGHT_FRONT_IN1 = 6;
+const int RIGHT_FRONT_IN2 = 7;
+// Rueda derecha trasera:
+const int RIGHT_REAR_IN3 = 8;
+const int RIGHT_REAR_IN4 = 13;
 
-// Función para mover el robot a la izquierda
-void moveLeft() {
-  wheelFL.write(60);
-  wheelFR.write(120);
-  wheelBL.write(60);
-  wheelBR.write(120);
-}
+// Servos normales (garra)
+const int CLAW_ROTATION_PIN = 10;  // Rota la garra (arriba/abajo)
+const int CLAW_GRIP_PIN = 9;       // Abre o cierra la garra
 
-// Función para mover el robot a la derecha
-void moveRight() {
-  wheelFL.write(120);
-  wheelFR.write(60);
-  wheelBL.write(120);
-  wheelBR.write(60);
-}
+//==================================
+// Objetos Servo
+//==================================
+Servo clawRotation; // Servo para rotar la garra
+Servo clawGrip;     // Servo para abrir/cerrar la garra
 
-// Función para mover el robot hacia adelante
-void moveForward() {
-  wheelFL.write(100);
-  wheelFR.write(100);
-  wheelBL.write(100);
-  wheelBR.write(100);
-}
+//==================================
+// Enumeración para direcciones
+//==================================
+enum Direction { STOP, FORWARD, BACKWARD };
 
-// Función para mover el robot hacia atrás
-void moveBackward() {
-  wheelFL.write(80);
-  wheelFR.write(80);
-  wheelBL.write(80);
-  wheelBR.write(80);
-}
+//==================================
+// Funciones para controlar cada rueda individualmente
+//==================================
 
-//---------------------------------
-// Funciones para el elevador y la garra
-//---------------------------------
-
-// Función para subir el elevador
-void elevatorUp() {
-  elevator.write(110);  // Valor de ejemplo para subir
-}
-
-// Función para bajar el elevador
-void elevatorDown() {
-  elevator.write(70);   // Valor de ejemplo para bajar
-}
-
-// Función para abrir la garra
-void clawOpen() {
-  clawGrip.write(180);  // 180° para la garra abierta
-}
-
-// Función para cerrar la garra
-void clawClose() {
-  clawGrip.write(0);    // 0° para la garra cerrada
-}
-
-// Función para ajustar la orientación de la garra.
-// Recibe un valor en el rango -90 a 90 y lo remapea a 0-180.
-void setClawAngle(int8_t angleSigned) {
-  int mappedAngle = constrain(angleSigned + 90, 0, 180);
-  clawAngle.write(mappedAngle);
-}
-
-//---------------------------------
-// Función para procesar el comando recibido
-//---------------------------------
-void processCommand(char command) {
-  switch (command) {
-    case 'A':  // Mover a la izquierda
-      moveLeft();
+void setLeftRear(Direction d) {
+  switch(d) {
+    case FORWARD:
+      digitalWrite(LEFT_REAR_IN1, HIGH);
+      digitalWrite(LEFT_REAR_IN2, LOW);
       break;
-    case 'D':  // Mover a la derecha
-      moveRight();
+    case BACKWARD:
+      digitalWrite(LEFT_REAR_IN1, LOW);
+      digitalWrite(LEFT_REAR_IN2, HIGH);
       break;
-    case 'W':  // Avanzar
-      moveForward();
-      break;
-    case 'S':  // Retroceder
-      moveBackward();
-      break;
-    case 'U':  // Elevar (subir)
-      elevatorUp();
-      break;
-    case 'J':  // Bajar el elevador
-      elevatorDown();
-      break;
-    case 'O':  // Abrir la garra
-      clawOpen();
-      break;
-    case 'C':  // Cerrar la garra
-      clawClose();
-      break;
-    // Puedes agregar más comandos según lo necesites.
+    case STOP:
     default:
-      // Si el comando no es reconocido o es 'X', se detiene el movimiento.
-      stopMovement();
+      digitalWrite(LEFT_REAR_IN1, LOW);
+      digitalWrite(LEFT_REAR_IN2, LOW);
       break;
   }
 }
 
-//---------------------------------
-// Configuración inicial
-//---------------------------------
-void setup() {
-  Serial.begin(9600); // Inicializa el puerto serial (Bluetooth) a 9600 baudios
-  
-  // Adjunta cada servo a su pin correspondiente
-  wheelFL.attach(pinWheelFL);
-  wheelFR.attach(pinWheelFR);
-  wheelBL.attach(pinWheelBL);
-  wheelBR.attach(pinWheelBR);
-  elevator.attach(pinElevator);
-  clawAngle.attach(pinClawAngle);
-  clawGrip.attach(pinClawGrip);
-  
-  // Posiciones iniciales: 90 es el estado neutro para los servos
-  stopMovement();
-  elevator.write(90);
-  setClawAngle(0); // 0 en función setClawAngle equivale a 90° del servo (estado central)
-  clawGrip.write(90);
+void setLeftFront(Direction d) {
+  switch(d) {
+    case FORWARD:
+      digitalWrite(LEFT_FRONT_IN3, HIGH);
+      digitalWrite(LEFT_FRONT_IN4, LOW);
+      break;
+    case BACKWARD:
+      digitalWrite(LEFT_FRONT_IN3, LOW);
+      digitalWrite(LEFT_FRONT_IN4, HIGH);
+      break;
+    case STOP:
+    default:
+      digitalWrite(LEFT_FRONT_IN3, LOW);
+      digitalWrite(LEFT_FRONT_IN4, LOW);
+      break;
+  }
 }
 
-//---------------------------------
-// Bucle principal
-//---------------------------------
+void setRightFront(Direction d) {
+  switch(d) {
+    case FORWARD:
+      digitalWrite(RIGHT_FRONT_IN1, HIGH);
+      digitalWrite(RIGHT_FRONT_IN2, LOW);
+      break;
+    case BACKWARD:
+      digitalWrite(RIGHT_FRONT_IN1, LOW);
+      digitalWrite(RIGHT_FRONT_IN2, HIGH);
+      break;
+    case STOP:
+    default:
+      digitalWrite(RIGHT_FRONT_IN1, LOW);
+      digitalWrite(RIGHT_FRONT_IN2, LOW);
+      break;
+  }
+}
+
+void setRightRear(Direction d) {
+  switch(d) {
+    case FORWARD:
+      digitalWrite(RIGHT_REAR_IN3, HIGH);
+      digitalWrite(RIGHT_REAR_IN4, LOW);
+      break;
+    case BACKWARD:
+      digitalWrite(RIGHT_REAR_IN3, LOW);
+      digitalWrite(RIGHT_REAR_IN4, HIGH);
+      break;
+    case STOP:
+    default:
+      digitalWrite(RIGHT_REAR_IN3, LOW);
+      digitalWrite(RIGHT_REAR_IN4, LOW);
+      break;
+  }
+}
+
+//==================================
+// Funciones para el sistema de polea/elevador
+//==================================
+void setPulley(Direction d) {
+  switch(d) {
+    case FORWARD:  // Subir
+      digitalWrite(PULLEY_IN1, HIGH);
+      digitalWrite(PULLEY_IN2, LOW);
+      break;
+    case BACKWARD: // Bajar
+      digitalWrite(PULLEY_IN1, LOW);
+      digitalWrite(PULLEY_IN2, HIGH);
+      break;
+    case STOP:
+    default:
+      digitalWrite(PULLEY_IN1, LOW);
+      digitalWrite(PULLEY_IN2, LOW);
+      break;
+  }
+}
+
+//==================================
+// Funciones de movimientos del robot (combinación de ruedas)
+//==================================
+
+// Movimiento en "frente": todas las ruedas hacia adelante
+void moveForward() {
+  setLeftFront(FORWARD);
+  setLeftRear(FORWARD);
+  setRightFront(FORWARD);
+  setRightRear(FORWARD);
+}
+
+// Movimiento en "atrás": todas las ruedas hacia atrás
+void moveBackward() {
+  setLeftFront(BACKWARD);
+  setLeftRear(BACKWARD);
+  setRightFront(BACKWARD);
+  setRightRear(BACKWARD);
+}
+
+// Movimiento lateral "izquierda" (strafe left):
+// Según especificaciones para moverse a la izquierda:
+// - Rueda derecha frontal (wheel 1): FORWARD (arriba)
+// - Rueda derecha trasera (wheel 2): BACKWARD (atrás)
+// - Rueda izquierda frontal (wheel 3): BACKWARD (atrás)
+// - Rueda izquierda trasera (wheel 4): FORWARD (arriba)
+void moveLeft() {
+  setRightFront(FORWARD);   // Wheel 1
+  setRightRear(BACKWARD);   // Wheel 2
+  setLeftFront(BACKWARD);   // Wheel 3
+  setLeftRear(FORWARD);     // Wheel 4
+}
+
+// Movimiento lateral "derecha" (strafe right):
+// Para moverse a la derecha:
+// - Rueda derecha frontal (wheel 1): BACKWARD (atrás)
+// - Rueda derecha trasera (wheel 2): FORWARD (arriba)
+// - Rueda izquierda frontal (wheel 3): FORWARD (arriba)
+// - Rueda izquierda trasera (wheel 4): BACKWARD (atrás)
+void moveRight() {
+  setRightFront(BACKWARD);  // Wheel 1
+  setRightRear(FORWARD);    // Wheel 2
+  setLeftFront(FORWARD);    // Wheel 3
+  setLeftRear(BACKWARD);    // Wheel 4
+}
+
+// Rotación: Vuelta izquierda (rotate left)
+// Comúnmente se hace: ruedas izquierdas hacia atrás y ruedas derechas hacia adelante.
+void rotateLeft() {
+  setLeftFront(BACKWARD);
+  setLeftRear(BACKWARD);
+  setRightFront(FORWARD);
+  setRightRear(FORWARD);
+}
+
+// Rotación: Vuelta derecha (rotate right)
+// Ruedas izquierdas hacia adelante y ruedas derechas hacia atrás.
+void rotateRight() {
+  setLeftFront(FORWARD);
+  setLeftRear(FORWARD);
+  setRightFront(BACKWARD);
+  setRightRear(BACKWARD);
+}
+
+// Detener todas las ruedas
+void stopWheels() {
+  setLeftFront(STOP);
+  setLeftRear(STOP);
+  setRightFront(STOP);
+  setRightRear(STOP);
+}
+
+//==================================
+// Funciones para servos de la garra
+//==================================
+void clawOpen() {
+  // 0 = garra abierta
+  clawGrip.write(0);
+}
+
+void clawClose() {
+  // 180 = garra cerrada
+  clawGrip.write(180);
+}
+
+void setClawRotation(int angle) {
+  // Rota la garra; se espera ángulo entre 0 y 180
+  clawRotation.write(angle);
+}
+
+//==================================
+// Configuración inicial
+//==================================
+void setup() {
+  // Configurar pines del Puente H Izquierdo:
+  pinMode(LEFT_REAR_IN1, OUTPUT);
+  pinMode(LEFT_REAR_IN2, OUTPUT);
+  pinMode(LEFT_FRONT_IN3, OUTPUT);
+  pinMode(LEFT_FRONT_IN4, OUTPUT);
+  
+  // Configurar pines del Puente H del Medio (polea):
+  pinMode(PULLEY_IN1, OUTPUT);
+  pinMode(PULLEY_IN2, OUTPUT);
+  
+  // Configurar pines del Puente H Derecho:
+  pinMode(RIGHT_FRONT_IN1, OUTPUT);
+  pinMode(RIGHT_FRONT_IN2, OUTPUT);
+  pinMode(RIGHT_REAR_IN3, OUTPUT);
+  pinMode(RIGHT_REAR_IN4, OUTPUT);
+  
+  // Inicializar comunicación serial para el módulo Bluetooth
+  Serial.begin(9600);
+  
+  // Inicializar servos de la garra:
+  clawRotation.attach(CLAW_ROTATION_PIN);
+  clawGrip.attach(CLAW_GRIP_PIN);
+  
+  // Posiciones iniciales: detener motores y poner servos en posición neutra
+  stopWheels();
+  setPulley(STOP);
+  clawRotation.write(90); // Centro para la rotación de la garra
+  clawGrip.write(90);     // Posición intermedia (ajustar según calibración)
+  
+  // Todos los pines se usan en este diseño.
+  Serial.println("Todos los pines están configurados y en uso.");
+}
+
+//==================================
+// Bucle principal: procesamiento de comandos vía Bluetooth
+//==================================
 void loop() {
-  // Se asume que la app envía un char cada 10ms, sin excepción.
-  if (Serial.available() > 0) {
-    char command = Serial.read();
-    // Si el comando recibido es distinto de 'X', se procesa la acción
-    if (command != 'X') {
-      processCommand(command);
-    } else {
-      // Si se recibe 'X', se detienen los movimientos
-      stopMovement();
+
+  if (DEBUG)
+  {
+    moveForward();
+  }
+  else
+  {
+    if (Serial.available() > 0) {
+      char command = Serial.read();
+      switch(command) {
+        // Movimientos de ruedas:
+        case 'W': moveForward(); break;    // Avanzar
+        case 'S': moveBackward(); break;   // Retroceder
+        case 'A': moveLeft(); break;       // Mover lateral izquierda (strafe left)\n      
+        case 'D': moveRight(); break;      // Mover lateral derecha (strafe right)\n      
+        case 'Q': rotateLeft(); break;     // Rotar a la izquierda\n      
+        case 'E': rotateRight(); break;    // Rotar a la derecha\n      
+        case 'X': stopWheels(); break;     // Detener ruedas\n      \n      
+        // Sistema de polea/elevador:\n      
+        case 'U': setPulley(FORWARD); break;  // Subir elevador\n      
+        case 'J': setPulley(BACKWARD); break; // Bajar elevador\n      
+        case 'P': setPulley(STOP); break;      // Detener elevador\n      \n      
+        // Servos de la garra:\n      
+        case 'O': clawOpen(); break;       // Abrir garra\n      
+        case 'C': clawClose(); break;      // Cerrar garra\n      
+        // Comandos adicionales pueden agregarse si es necesario\n      
+        default: break;
+      }
     }
   }
-  
-  // Control para respetar el intervalo de actualización de 10ms
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis < updateInterval) {
-    return;
-  }
-  previousMillis = currentMillis;
 }
